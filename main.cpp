@@ -93,17 +93,24 @@ int main() {
     unsigned int frequency = FrequencyDis(gen);
 
     // 运行电机
-    // NT_StepMove_S(ntHandle, CHANNEL_ID, steps, amplitude, frequency);
+    NT_StepMove_S(ntHandle, CHANNEL_ID, steps, amplitude, frequency);
+    int runTime = (float)(1000 * std::abs(steps)) / (float)frequency; // ms
+    std::cout << "Running for " << runTime << "ms" << std::endl;
+    Sleep(runTime * 1.5);
 
     // 获取陀螺仪数据
     float angle = (float)sReg[Roll] / 32768.0f * 180.0f;
 
     // 写入 csv 文件
+    std::cout << steps << "," << amplitude << "," << frequency << "," << angle
+              << std::endl;
     outputCsv << steps << "," << amplitude << "," << frequency << "," << angle
               << std::endl;
   }
 
   // 逆初始化
+  WitDeInit();
+  CloseCOMDevice();
   outputCsv.close();
   NT_CloseSystem(ntHandle);
   return 0;
