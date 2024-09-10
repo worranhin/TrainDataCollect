@@ -21,9 +21,10 @@
 #define CHANNEL_ID 3 - 1
 
 static char s_cDataUpdate = 0;
-int iComPort = 6;
+int iComPort = 11;
 int iBaud = 9600;
 int iAddress = 0x50;
+static float lastAngle = 0;
 void ComRxCallBack(char *p_data, UINT32 uiSize) {
   for (UINT32 i = 0; i < uiSize; i++) {
     WitSerialDataIn(p_data[i]);
@@ -72,11 +73,11 @@ int main() {
   outputCsv << "Steps,Amplitude,Frequency,Angle\n"; // 写入首行
 
   // 配置随机数生成器
-  const signed int StepsMin = -30000;
-  const signed int StepsMax = 30000;
-  const unsigned int AmplitudeMin = 100;
+  const signed int StepsMin = -10000;
+  const signed int StepsMax = 10000;
+  const unsigned int AmplitudeMin = 1000;
   const unsigned int AmplitudeMax = 4095;
-  const unsigned int FrequencyMin = 1;
+  const unsigned int FrequencyMin = 3000;
   const unsigned int FrequencyMax = 18500;
 
   std::random_device rd;
@@ -85,8 +86,10 @@ int main() {
   std::uniform_int_distribution<> AmplitudeDis(AmplitudeMin, AmplitudeMax);
   std::uniform_int_distribution<> FrequencyDis(FrequencyMin, FrequencyMax);
 
+  float lastAngle = (float)sReg[Roll] / 32768.0f * 180.0f;
+
   // 主循环
-  for (int i = 0; i < 10; i++) {
+  for (int i = 0; i < 20; i++) {
     // 生成随机控制变量
     signed int steps = StepsDis(gen);
     unsigned int amplitude = AmplitudeDis(gen);
@@ -100,11 +103,13 @@ int main() {
 
     // 获取陀螺仪数据
     float angle = (float)sReg[Roll] / 32768.0f * 180.0f;
+    float deltaAngle = angle - lastAngle;
+    lastAngle = angle;
 
     // 写入 csv 文件
-    std::cout << steps << "," << amplitude << "," << frequency << "," << angle
+    std::cout << steps << "," << amplitude << "," << frequency << "," << deltaAngle
               << std::endl;
-    outputCsv << steps << "," << amplitude << "," << frequency << "," << angle
+    outputCsv << steps << "," << amplitude << "," << frequency << "," << deltaAngle
               << std::endl;
   }
 
