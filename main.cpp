@@ -12,7 +12,7 @@
 #include <stdio.h>
 
 #include <ctime>
-#include <fstream> // 用于写入文件
+#include <fstream>  // 用于写入文件
 #include <string>
 
 #include <chrono>
@@ -20,18 +20,29 @@
 
 #define CHANNEL_ID 3 - 1
 
-static char s_cDataUpdate = 0;
+const signed int StepsMin = 0;  // 电机控制参数的最大和最小值
+const signed int StepsMax = 10000;
+const unsigned int AmplitudeMin = 1000;
+const unsigned int AmplitudeMax = 4095;
+const unsigned int FrequencyMin = 3000;
+const unsigned int FrequencyMax = 8000;
+const unsigned int RunCount = 20;  // 总运行次数
+const unsigned int DelayTime =
+    4000;  // 电机运行后延时的时间 ms, 正常运行范围 3 - 5s
+unsigned int CurrentRunCount = 0;
+
+static char s_cDataUpdate = 0;  // 通讯配置
 int iComPort = 11;
 int iBaud = 9600;
 int iAddress = 0x50;
 static float lastAngle = 0;
-void ComRxCallBack(char *p_data, UINT32 uiSize) {
+void ComRxCallBack(char* p_data, UINT32 uiSize) {
   for (UINT32 i = 0; i < uiSize; i++) {
     WitSerialDataIn(p_data[i]);
   }
 }
 static void AutoScanSensor(void);
-static void SensorUartSend(uint8_t *p_data, uint32_t uiSize);
+static void SensorUartSend(uint8_t* p_data, uint32_t uiSize);
 static void CopeSensorData(uint32_t uiReg, uint32_t uiRegNum);
 static void DelayMs(uint16_t ms);
 
@@ -58,7 +69,7 @@ int main() {
 
   /// 打开 csv 文件
   std::time_t now = std::time(nullptr);
-  std::tm *localTime = std::localtime(&now);
+  std::tm* localTime = std::localtime(&now);
   char timeStamp[12];
   std::strftime(timeStamp, sizeof(timeStamp), "%y%m%d%H%M", localTime);
   std::string fileName = "data_" + std::string(timeStamp) + ".csv";
@@ -70,15 +81,9 @@ int main() {
     return 1;
   }
 
-  outputCsv << "Steps,Amplitude,Frequency,Angle\n"; // 写入首行
+  outputCsv << "Steps,Amplitude,Frequency,Angle,DeltaAngle\n";  // 写入首行
 
   // 配置随机数生成器
-  const signed int StepsMin = -10000;
-  const signed int StepsMax = 10000;
-  const unsigned int AmplitudeMin = 1000;
-  const unsigned int AmplitudeMax = 4095;
-  const unsigned int FrequencyMin = 3000;
-  const unsigned int FrequencyMax = 18500;
 
   std::random_device rd;
   std::mt19937 gen(rd());
@@ -86,31 +91,47 @@ int main() {
   std::uniform_int_distribution<> AmplitudeDis(AmplitudeMin, AmplitudeMax);
   std::uniform_int_distribution<> FrequencyDis(FrequencyMin, FrequencyMax);
 
+  // 读取初始角度
+  Sleep(1000);
   float lastAngle = (float)sReg[Roll] / 32768.0f * 180.0f;
 
   // 主循环
-  for (int i = 0; i < 20; i++) {
+  for (int i = 0; i < RunCount; i++) {
     // 生成随机控制变量
-    signed int steps = StepsDis(gen);
-    unsigned int amplitude = AmplitudeDis(gen);
+    // signed int steps = StepsDis(gen);
+    // unsigned int amplitude = AmplitudeDis(gen);
+    signed int steps = 3000;
+    unsigned int amplitude = 4000;
     unsigned int frequency = FrequencyDis(gen);
 
-    // 运行电机
-    NT_StepMove_S(ntHandle, CHANNEL_ID, steps, amplitude, frequency);
-    int runTime = (float)(1000 * std::abs(steps)) / (float)frequency; // ms
-    std::cout << "Running for " << runTime << "ms" << std::endl;
-    Sleep(runTime * 1.5);
+    int dir = 1;
+    for (int j = 0; j < 2; j++) {
+      if (j == 0) {
+        dir = 1;
+      } else {
+        dir = -1;
+      }
 
-    // 获取陀螺仪数据
-    float angle = (float)sReg[Roll] / 32768.0f * 180.0f;
-    float deltaAngle = angle - lastAngle;
-    lastAngle = angle;
+      NT_StepMove_S(ntHandle, CHANNEL_ID, steps * dir, amplitude, frequency);
+      DWORD runTime = (double)(1000 * steps) / (double)frequency;  // ms
+      Sleep(runTime + DelayTime);
 
-    // 写入 csv 文件
-    std::cout << steps << "," << amplitude << "," << frequency << "," << deltaAngle
-              << std::endl;
-    outputCsv << steps << "," << amplitude << "," << frequency << "," << deltaAngle
-              << std::endl;
+      // 获取陀螺仪数据
+      float angle = -(float)sReg[Roll] / 32768.0f * 180.0f;
+      float deltaAngle = angle - lastAngle;
+      lastAngle = angle;
+      // Sleep(1000);
+
+      // 写入 csv 文件
+      outputCsv << steps * dir << "," << amplitude << "," << frequency << ","
+                << angle << "," << deltaAngle << std::endl;
+
+      // 打印当前信息
+      std::cout << "Current run count: " << i + 1 << " / " << RunCount
+                << std::endl;
+      std::cout << steps * dir << "," << amplitude << "," << frequency << ","
+                << angle << "," << deltaAngle << std::endl;
+    }
   }
 
   // 逆初始化
@@ -121,10 +142,12 @@ int main() {
   return 0;
 }
 
-static void DelayMs(uint16_t ms) { Sleep(ms); }
+static void DelayMs(uint16_t ms) {
+  Sleep(ms);
+}
 
-static void SensorUartSend(uint8_t *p_data, uint32_t uiSize) {
-  SendUARTMessageLength((const char *)p_data, uiSize);
+static void SensorUartSend(uint8_t* p_data, uint32_t uiSize) {
+  SendUARTMessageLength((const char*)p_data, uiSize);
 }
 static void CopeSensorData(uint32_t uiReg, uint32_t uiRegNum) {
   s_cDataUpdate = 1;
