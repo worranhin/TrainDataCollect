@@ -15,9 +15,6 @@
 #include <fstream>  // 用于写入文件
 #include <string>
 
-#include <chrono>
-#include <vector>
-
 #define CHANNEL_ID 3 - 1
 
 const signed int StepsMin = 0;  // 电机控制参数的最大和最小值
