@@ -15,9 +15,6 @@
 #include <fstream> // 用于写入文件
 #include <string>
 
-#include <chrono>
-#include <vector>
-
 #define CHANNEL_ID 3 - 1
 
 static char s_cDataUpdate = 0;
